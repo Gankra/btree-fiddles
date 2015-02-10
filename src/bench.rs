@@ -80,7 +80,7 @@ pub fn find_rand_n<M, T, I, F>(n: usize,
     // measure
     let mut i = 0;
     b.iter(|| {
-        let t = find(map, keys[i]);
+        let t = find(map, keys[black_box(i)]);
         i = (i + 1) % n;
         black_box(t);
     })
@@ -102,7 +102,7 @@ pub fn find_seq_n<M, T, I, F>(n: usize,
     // measure
     let mut i = 0;
     b.iter(|| {
-        let x = find(map, i);
+        let x = find(map, black_box(i));
         i = (i + 1) % n;
         black_box(x);
     })
