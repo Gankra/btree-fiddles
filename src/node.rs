@@ -24,6 +24,9 @@ use std::ptr::Unique;
 use std::{slice, mem, ptr, cmp, num, raw};
 use std::rt::heap;
 
+// secret performance sauce
+const B: usize = 6;
+
 /// Represents the result of an Insertion: either the item fit, or the node had to split
 pub enum InsertionResult<K, V> {
     /// The inserted element fit
@@ -64,15 +67,6 @@ pub struct Node<K, V> {
     // Note: instead of accessing this field directly, please call the `len()` method, which should
     // be more stable in the face of representation changes.
     _len: usize,
-
-    // FIXME(gereeter) It shouldn't be necessary to store the capacity in every node, as it should
-    // be constant throughout the tree. Once a solution to this is found, it might be possible to
-    // also pass down the offsets into the buffer that vals and edges are stored at, removing the
-    // need for those two pointers.
-    //
-    // Note: instead of accessing this field directly, please call the `capacity()` method, which
-    // should be more stable in the face of representation changes.
-    _capacity: usize,
 }
 
 struct NodeSlice<'a, K: 'a, V: 'a> {
@@ -310,7 +304,6 @@ impl<K, V> Node<K, V> {
             vals: Unique(buffer.offset(vals_offset as isize) as *mut V),
             edges: Unique(buffer.offset(edges_offset as isize) as *mut Node<K, V>),
             _len: 0,
-            _capacity: capacity,
         }
     }
 
@@ -328,7 +321,6 @@ impl<K, V> Node<K, V> {
             vals: Unique(unsafe { buffer.offset(vals_offset as isize) as *mut V }),
             edges: Unique(ptr::null_mut()),
             _len: 0,
-            _capacity: capacity,
         }
     }
 
@@ -555,14 +547,14 @@ impl<K: Ord, V> Node<K, V> {
 // Public interface
 impl <K, V> Node<K, V> {
     /// Make a leaf root from scratch
-    pub fn make_leaf_root(b: usize) -> Node<K, V> {
-        Node::new_leaf(capacity_from_b(b))
+    pub fn make_leaf_root() -> Node<K, V> {
+        Node::new_leaf(capacity_from_b(B))
     }
 
     /// Make an internal root and swap it with an old root
-    pub fn make_internal_root(left_and_out: &mut Node<K,V>, b: usize, key: K, value: V,
+    pub fn make_internal_root(left_and_out: &mut Node<K,V>, key: K, value: V,
             right: Node<K,V>) {
-        let node = mem::replace(left_and_out, unsafe { Node::new_internal(capacity_from_b(b)) });
+        let node = mem::replace(left_and_out, unsafe { Node::new_internal(capacity_from_b(B)) });
         left_and_out._len = 1;
         unsafe {
             ptr::write(left_and_out.keys_mut().get_unchecked_mut(0), key);
@@ -579,7 +571,7 @@ impl <K, V> Node<K, V> {
 
     /// How many key-value pairs the node can fit
     pub fn capacity(&self) -> usize {
-        self._capacity
+        capacity_from_b(B)
     }
 
     /// If the node has any children
