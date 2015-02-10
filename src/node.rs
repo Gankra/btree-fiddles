@@ -48,11 +48,8 @@ pub enum SearchResult<NodeRef> {
 pub struct Node<K, V> {
     // To avoid the need for multiple allocations, we allocate a single buffer with enough space
     // for `capacity` keys, `capacity` values, and (in internal nodes) `capacity + 1` edges.
-    // Despite this, we store three separate pointers to the three "chunks" of the buffer because
-    // the performance drops significantly if the locations of the vals and edges need to be
-    // recalculated upon access.
     //
-    // These will never be null during normal usage of a `Node`. However, to avoid the need for a
+    // This will never be null during normal usage of a `Node`. However, to avoid the need for a
     // drop flag, `Node::drop` zeroes `keys`, signaling that the `Node` has already been cleaned
     // up.
     data: *mut u8, // TODO: Phantom types
@@ -62,7 +59,10 @@ pub struct Node<K, V> {
     //
     // Note: instead of accessing this field directly, please call the `len()` method, which should
     // be more stable in the face of representation changes.
-    _len: usize,
+    //
+    // u16 is used because on both 32 and 64-bit this will keep us below another word boundary
+    // when combined with the bool
+    _len: u16,
 
     _is_leaf: bool,
 
@@ -458,12 +458,15 @@ impl<K: Clone, V: Clone> Clone for Node<K, V> {
             mem::forget(vals);
             mem::forget(edges);
 
-            ret._len = self.len();
+            ret._len = self._len;
         }
 
         ret
     }
 }
+
+unsafe impl<K: Send, V: Send> Send for Node<K, V> {}
+unsafe impl<K: Sync, V: Sync> Sync for Node<K, V> {}
 
 /// A reference to something in the middle of a `Node`. There are two `Type`s of `Handle`s,
 /// namely `KV` handles, which point to key/value pairs, and `Edge` handles, which point to edges
@@ -585,7 +588,7 @@ impl <K, V> Node<K, V> {
 
     /// How many key-value pairs the node contains
     pub fn len(&self) -> usize {
-        self._len
+        self._len as usize
     }
 
     /// How many key-value pairs the node can fit
@@ -1225,7 +1228,7 @@ impl<K, V> Node<K, V> {
         };
 
         unsafe {
-            right._len = self.len() / 2;
+            right._len = (self.len() / 2) as u16;
             let right_offset = self.len() - right.len();
             ptr::copy_nonoverlapping_memory(
                 right.keys_mut().as_mut_ptr(),
@@ -1248,7 +1251,7 @@ impl<K, V> Node<K, V> {
             let key = ptr::read(self.keys().get_unchecked(right_offset - 1));
             let val = ptr::read(self.vals().get_unchecked(right_offset - 1));
 
-            self._len = right_offset - 1;
+            self._len = (right_offset - 1) as u16;
 
             (key, val, right)
         }
@@ -1263,7 +1266,7 @@ impl<K, V> Node<K, V> {
 
         unsafe {
             let old_len = self.len();
-            self._len += right.len() + 1;
+            self._len += (right.len() + 1) as u16;
 
             ptr::write(self.keys_mut().get_unchecked_mut(old_len), key);
             ptr::write(self.vals_mut().get_unchecked_mut(old_len), val);
