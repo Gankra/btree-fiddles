@@ -16,6 +16,7 @@
 extern crate test;
 
 mod node;
+#[macro_use]
 mod bench;
 pub mod map;
 pub mod set;
